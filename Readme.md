@@ -19,7 +19,7 @@ This API allows users to rent e-bikes, manage stations, and track journeys.
 ```sh
 # Clone the repository
 git clone <repo-url>
-cd ebike-renting-api
+cd ebike-api
 
 # Install dependencies
 npm install
