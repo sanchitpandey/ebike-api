@@ -5,11 +5,24 @@ const updateBikeStatus = async (req, res) => {
   const { bikeId } = req.params;
   const { status } = req.body;
 
-  const bike = await Bike.findByIdAndUpdate(bikeId, { status }, { new: true });
+  const bike = await Bike.findOneAndUpdate(
+    { bikeId },
+    { status },
+    { new: true }
+  );
+  //const bike = await Bike.findByIdAndUpdate(bikeId, { status }, { new: true });
 
   if (!bike) return res.status(404).json({ message: "Bike not found" });
 
-  res.json(bike);
+  res.status(200).json({ message: "Bike status updated successfully.", bike });
+};
+
+const getBikeStatus = async (req, res) => {
+  const { bikeId } = req.params;
+
+  const bike = await Bike.findOne({ qrCode: bikeId });
+  if (!bike) return res.status(404).json({ message: "Bike not found" });
+  res.status(200).json({ bike });
 };
 
 const createBike = async (req, res) => {
@@ -71,4 +84,4 @@ const deleteBike = async (req, res) => {
 };
 
 // Add to exports
-module.exports = { updateBikeStatus, createBike, deleteBike };
+module.exports = { updateBikeStatus, createBike, deleteBike, getBikeStatus };

@@ -5,14 +5,25 @@ const User = require("../models/User.js");
 
 const startJourney = async (req, res) => {
   try {
-    const { bikeId, stationId } = req.body;
+    const { bikeQr, stationId } = req.body;
     const userId = req.user.id;
 
     // 1. Check bike availability
-    const bike = await Bike.findById(bikeId);
+    const bike = await Bike.findOne({ qrCode: bikeQr });
+    // console.log("QR received:", bikeQr);
+    // console.log("Bike found:", bike);
+
     if (!bike) return res.status(404).json({ message: "Bike not found" });
     if (bike.status !== "available") {
       return res.status(400).json({ message: "Bike is already in use" });
+    }
+    const activeJourney = await Journey.findOne({
+      bikeId: bikeQr,
+      endTime: { $exists: false },
+    });
+
+    if (activeJourney) {
+      return res.status(400).json({ error: "Bike already in use" });
     }
 
     // 2. Verify station exists
@@ -22,19 +33,19 @@ const startJourney = async (req, res) => {
     // 3. Create new journey
     const newJourney = await Journey.create({
       user: userId,
-      bike: bikeId,
+      bike: bike._id,
       startStation: stationId,
       startTime: new Date(),
     });
 
     // 4. Update bike status
     bike.status = "in_use";
-    bike.currentStation = undefined; // Remove from station
+    bike.currentStation = undefined;
     await bike.save();
 
     // 5. Remove bike from starting station
     await Station.findByIdAndUpdate(stationId, {
-      $pull: { availableBikes: bikeId },
+      $pull: { availableBikes: bike._id },
     });
 
     // 6. Update user's current journey
@@ -57,43 +68,63 @@ const startJourney = async (req, res) => {
 
 const endJourney = async (req, res) => {
   try {
-    const { bikeId, stationId } = req.body;
+    var { bikeId, stationId } = req.body;
     const userId = req.user.id;
+    stationId = stationId.substring(8);
+    console.log(stationId);
+    // 1. Validate inputs
+    if (!bikeId || !stationId) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
 
-    // 1. Find active journey
+    // 2. Find active journey
     const journey = await Journey.findOne({
       user: userId,
-      bike: bikeId,
       endTime: { $exists: false },
     });
 
-    if (!journey) return res.status(400).json({ message: "No active journey" });
+    if (!journey) {
+      return res.status(404).json({ message: "No active journey found" });
+    }
 
-    // 2. Calculate cost
+    // 3. Calculate duration and cost
     const endTime = new Date();
-    const duration = (endTime - journey.startTime) / (1000 * 60); // minutes
-    const cost = duration * 0.1; // $0.10 per minute
+    const durationMinutes = Math.floor((endTime - journey.startTime) / 60000);
+    const cost = durationMinutes * 0.1; // $0.10 per minute
 
-    // 3. Update journey
+    // 4. Update journey
     journey.endTime = endTime;
     journey.endStation = stationId;
     journey.cost = cost;
     await journey.save();
 
-    // 4. Update bike
-    const bike = await Bike.findById(bikeId);
+    console.log(journey);
+
+    // 5. Update bike status
+    const bike = await Bike.findById(journey.bike);
     bike.status = "available";
     bike.currentStation = stationId;
     await bike.save();
 
-    // 5. Add bike back to station
+    // 6. Update station
     await Station.findByIdAndUpdate(stationId, {
-      $push: { availableBikes: bikeId },
+      $addToSet: { availableBikes: bike._id },
     });
 
-    res.json(journey);
+    // 7. Clear user's current journey
+    await User.findByIdAndUpdate(userId, { currentJourney: null });
+
+    res.status(200).json({
+      message: "Journey ended successfully",
+      cost: cost.toFixed(2),
+      duration: durationMinutes,
+    });
   } catch (err) {
-    res.status(500).json({ message: "Error ending journey" });
+    console.error("Error ending journey:", err);
+    res.status(500).json({
+      message: "Error ending journey",
+      error: err.message,
+    });
   }
 };
 
