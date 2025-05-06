@@ -177,6 +177,18 @@ The API will run on `http://localhost:5000`.
 }
 ```
 
+### Get Bike Status
+
+**Endpoint:** `GET /bikes/BIKE-5678`
+
+**Headers:**
+
+```json
+{
+  "Authorization": "Bearer jwt_token_here"
+}
+```
+
 ### Update Bike Status
 
 **Endpoint:** `PATCH /api/bikes/:bikeId`
